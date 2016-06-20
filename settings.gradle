@@ -1,0 +1,4 @@
+include ':project-lib',
+        ':sub-aar-c',
+        ':sub-jar-b',
+        ':sub-jar-a'
