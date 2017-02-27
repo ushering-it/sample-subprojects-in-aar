@@ -10,16 +10,80 @@ android {
         versionCode 1
         versionName "1.0"
     }
+
     buildTypes {
-        release {
+        debug {
+            debuggable true
             minifyEnabled false
+        }
+        release {
+            debuggable false
+            minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
+
+    publishNonDefault true
 }
 
 dependencies {
     compile fileTree(dir: 'libs', include: ['*.jar'])
 
-    compile project(':sub-aar-c')
+    compile project(':sub-jar-a')
+    compile project(':sub-jar-b')
+
+    debugCompile project(path: ':sub-aar-c', configuration: 'debug')
+    releaseCompile project(path: ':sub-aar-c', configuration: 'release')
+}
+
+// -----------------------------------------
+// Collect all classes.jar from local dependencies modules
+// -----------------------------------------
+android.libraryVariants.all { variant ->
+    def _path = project.getProjectDir().toPath()
+    def solutionDir = _path.getName(_path.nameCount - 2)
+    println("solutionName=" + solutionDir + " variant.name=" + variant.name)
+
+    Action copyClassesJarAction = new Action() {
+        @Override
+        void execute(Object o) {
+            String varLibsDir = makePath(getBuildDir().absolutePath, "intermediates", "bundles", variant.name, "libs")
+            String explodedDir = makePath(getBuildDir().absolutePath, "intermediates", "exploded-aar", solutionDir)
+
+            println("variantLibsDir=" + varLibsDir)
+            println("explodedDir=" + explodedDir)
+
+            new File(explodedDir).list().each { dir ->
+                try {
+                    File source = new File(makePath(explodedDir, dir, "unspecified", variant.name, "jars", "classes.jar"))
+                    File destination = new File(makePath(varLibsDir, dir + ".jar"))
+                    destination.bytes = source.bytes
+                } catch (e) {
+                    println("Copy error[var=" + variant.name + ", dir=" + dir + "]: " + e.getMessage())
+                }
+            }
+
+            pureJavaCopy(":sub-jar-a", varLibsDir)
+            pureJavaCopy(":sub-jar-b", varLibsDir)
+        }
+    }
+
+    project.tasks["bundle" + variant.name.capitalize()].doFirst(copyClassesJarAction)
+}
+
+// -----------------------------------------
+// Utility methods
+// -----------------------------------------
+
+def makePath(Object... paths) {
+    return paths.join(File.separator)
+}
+
+def pureJavaCopy(String subName, String varLibsDir) {
+    String purePath = makePath(project(subName).buildDir.absolutePath, "libs")
+    new File(purePath).list().each { fname ->
+        File source = new File(makePath(purePath, fname))
+        File destination = new File(makePath(varLibsDir, fname))
+        destination.bytes = source.bytes
+    }
 }
